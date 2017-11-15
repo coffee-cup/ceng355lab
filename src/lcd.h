@@ -2,13 +2,12 @@
 #ifndef LCD_H_
 #define LCD_H_
 
-#include <stdio.h>
+#include "cmsis/cmsis_device.h"
 #include "diag/Trace.h"
 #include "stm32f0xx_gpio.h"
 #include "stm32f0xx_rcc.h"
 #include "stm32f0xx_spi.h"
-#include "cmsis/cmsis_device.h"
-
+#include <stdio.h>
 
 // LCD
 #define LCD_EN (0x80)
@@ -21,10 +20,12 @@
 #define GPIO_LCK_PIN (GPIO_Pin_4)
 
 // TIM3
-#define myTIM3_PRESCALE ((uint16_t) 0x0000)
-#define myTIM3_PERIOD_DEFAULT (100)
-#define MAX_DELAY ((uint32_t) 96000)
-#define myTIM3_PERIOD ((uint32_t)0xFFFFFFFF) /* Maximum possible setting for overflow */
+#define myTIM3_PRESCALE ((uint16_t)0x0000)
+#define myTIM3_PERIOD_DEFAULT (100 * SystemCoreClock)
+
+// #define MAX_DELAY ((uint32_t)96000)
+// #define myTIM3_PERIOD \
+//   ((uint32_t)0xFFFFFFFF) /* Maximum possible setting for overflow */
 
 /*
  * Initialize the LCD display
