@@ -43,10 +43,6 @@ int main(int argc, char *argv[]) {
   myEXTI_Init();  /* Initialize EXTI */
   myLCD_Init();   /* Initialize LCD Display */
 
-  while (1) {
-    // Nothing is going on here...
-  }
-
   return 0;
 }
 

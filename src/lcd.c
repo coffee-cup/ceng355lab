@@ -4,16 +4,12 @@ void myLCD_Init() {
   trace_printf("Initing LCD\n");
 
   myGPIOB_Init();
-  mySPI_Init();
   myTIM3_Init();
+  mySPI_Init();
 
-  Delay(5000);
-  //	Delay((uint32_t)48000000);
-  //	Delay((uint32_t)48000000);
-  //	Delay((uint32_t)48000000);
-  //	Delay((uint32_t)48000000);
-
-  trace_printf("After 5s\n");
+  // Test delay 5s
+//  Delay(0xE4E1C00);
+//  trace_printf("After 5s\n");
 
   LCD_Command(ENABLE);
 
@@ -54,6 +50,8 @@ void mySPI_Init() {
 }
 
 void myGPIOB_Init() {
+  trace_printf("Initing GPIOB\n");
+
   /* Enable clock for GPIOA peripheral */
   // Relevant register: RCC->AHBENR
   RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
@@ -89,9 +87,9 @@ void myTIM3_Init() {
   /*
    * Settings for TIM3
          *
-   * bit 7: 		Auto reload preload enable = 1
+   * bit 7: 	Auto reload preload enable = 1
    * bit 6-5: 	Center-aligned mode selection = 00
-   * bit 4:		Direction = 0 - upcounter
+   * bit 4:		Direction = 0 - up counter
    * bit 3:		One-pulse mode = 1 - stops counting at next update event
    * bit 2:		Update request source = 1 - only counter overflow
 generates an update interrupt
@@ -99,7 +97,7 @@ generates an update interrupt
 generated
    * bit 0:		Counter enable = 0 - counter disabled
    */
-  TIM3->CR1 = ((uint16_t)0x8C);
+  TIM3->CR1 = ((uint16_t)0x008C);
 
   // Set clock prescaler value
   TIM3->PSC = myTIM3_PRESCALE;
@@ -107,8 +105,8 @@ generated
   // Set auto-reloaded delay
   TIM3->ARR = myTIM3_PERIOD_DEFAULT;
 
-  // Update timer registers.
-  TIM3->EGR |= 0x0001;
+  /* Update timer registers */
+  TIM3->EGR = ((uint16_t)0x0001);
 }
 
 /*
@@ -116,10 +114,10 @@ generated
  */
 void Delay(uint32_t time) {
   // Clear timer
-  TIM3->CNT = 0x0;
+  TIM3->CNT = (uint32_t)0x0;
 
   // Set timeout
-  TIM3->ARR = (uint32_t)(time * SystemCoreClock);
+  TIM3->ARR = time;
 
   // Update timer registers
   TIM3->EGR |= 0x0001;
@@ -128,9 +126,7 @@ void Delay(uint32_t time) {
   TIM3->CR1 |= TIM_CR1_CEN;
 
   // Wait until interrupt occurs
-  while (!(TIM3->SR & TIM_SR_UIF)) {
-    trace_printf("%d", TIM3->CNT);
-  }
+  while (!(TIM3->SR & TIM_SR_UIF));
 
   // Stop timer
   TIM3->CR1 &= ~(TIM_CR1_CEN);

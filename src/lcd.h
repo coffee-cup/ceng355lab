@@ -20,8 +20,8 @@
 #define GPIO_LCK_PIN (GPIO_Pin_4)
 
 // TIM3
-#define myTIM3_PRESCALE ((uint16_t)0x0000)
-#define myTIM3_PERIOD_DEFAULT (100 * SystemCoreClock)
+#define myTIM3_PRESCALE (47999)
+#define myTIM3_PERIOD_DEFAULT (100)
 
 // #define MAX_DELAY ((uint32_t)96000)
 // #define myTIM3_PERIOD \
