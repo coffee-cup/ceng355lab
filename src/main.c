@@ -29,14 +29,14 @@
 /* Maximum possible setting for overflow */
 #define myTIM2_PERIOD ((uint32_t)0xFFFFFFFF)
 
-// No prescaler for TIM3
-#define myTIM3_PRESCALER ((uint16_t)0x0000)
+// No prescaler for TIM16
+#define myTIM16_PRESCALER ((uint16_t)0x0000)
 // 1 Second
-#define myTIM3_PERIOD ((uint32_t)48000000)
+#define myTIM16_PERIOD ((uint32_t)SystemCoreClock)
 
 void myGPIOA_Init(void);
 void myTIM2_Init(void);
-void myTIM3_Init(void);
+void myTIM16_Init(void);
 void myEXTI_Init(void);
 
 // Your global variables...
@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
   myTIM2_Init();  /* Initialize timer TIM2 */
   myEXTI_Init();  /* Initialize EXTI */
   myLCD_Init();   /* Initialize LCD Display */
-  myTIM3_Init();  /* Initialize timer TIM3 */
+  myTIM16_Init(); /* Initialize timer TIM16 */
 
   return 0;
 }
@@ -101,72 +101,40 @@ void myTIM2_Init() {
   TIM2->DIER |= TIM_DIER_UIE;
 }
 
-void myTIM3_Init() {
-	 RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+void myTIM16_Init() {
+  RCC->APB1ENR |= RCC_APB1ENR_TIM16EN;
 
-	  /* Configure TIM2: buffer auto-reload, count up, stop on overflow,
-	   * enable update events, interrupt on overflow only */
-	  // Relevant register: TIM2->CR1
-	 TIM3->CR1 = ((uint16_t)0x008C);
+  /*
+   * Settings for TIM16
+   *
+   * auto reload
+   * count up
+   * stop on overflow
+   * enable update events
+   * interrupt on underflow only
+   */
+  TIM16->CR1 = ((uint16_t)0x008C);
 
-	  /* Set clock prescaler value */
-	 TIM3->PSC = myTIM2_PRESCALER;
-	  /* Set auto-reloaded delay */
-	 TIM3->ARR = myTIM2_PERIOD;
+  // Set prescaler
+  TIM16->PSC = myTIM16_PRESCALER;
 
-	  /* Update timer registers */
-	  // Relevant register: TIM2->EGR
-	 TIM3->EGR = ((uint16_t)0x0001);
+  // Set auto reload delay
+  TIM16->ARR = myTIM16_PERIOD;
 
-	  /* Assign TIM2 interrupt priority = 0 in NVIC */
-	  // Relevant register: NVIC->IP[3], or use NVIC_SetPriority
-	  NVIC_SetPriority(TIM3_IRQn, 0);
+  // Update timer registers
+  TIM16->EGR = ((uint16_t)0x0001);
 
-	  /* Enable TIM2 interrupts in NVIC */
-	  // Relevant register: NVIC->ISER[0], or use NVIC_EnableIRQ
-	  NVIC_EnableIRQ(TIM3_IRQn);
+  // Assign TIM16 interrupt priority = 1 in NVIC
+  NVIC_SetPriority(TIM16_IRQn, 1);
 
-	  /* Enable update interrupt generation */
-	  // Relevant register: TIM2->DIER
-	  TIM3->DIER |= TIM_DIER_UIE;
+  // Enable TIM16 interrupts in NVIC
+  NVIC_EnableIRQ(TIM16_IRQn);
 
-	  TIM3->CR1 |= TIM_CR1_CEN;;
+  // Enable update interrupt generation
+  TIM16->DIER |= TIM_DIER_UIE;
 
-
-	// Enable clock
-//	RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
-//
-//	/*
-//	 * Settings for TIM3
-//	 *
-//	 * auto reload
-//	 * count up
-//	 * stop on overflow
-//	 * enable update events
-//	 * interrupt on underflow only
-//	 */
-//	TIM3->CR1 = ((uint16_t)0x008C);;
-//
-//	// Set prescaler
-//	TIM3->PSC = myTIM2_PRESCALER;
-//
-//	// Set auto reload delay
-//	TIM3->ARR = myTIM2_PERIOD;
-//
-//	// Update timer registers
-//	TIM3->EGR = ((uint16_t)0x0001);
-//
-//	// Assign TIM3 interrupt priority = 0 in NVIC
-//	NVIC_SetPriority(TIM3_IRQn, 0);
-//
-//	// Enable TIM3 interrupts in NVIC
-//	NVIC_EnableIRQ(TIM3_IRQn);
-//
-//	// Enable update interrupt generation
-//	TIM3->DIER |= TIM_DIER_UIE;
-
-	// Start timer
-//	TIM3->CR1 |= TIM_CR1_CEN;
+  // Start timer
+  TIM16->CR1 |= TIM_CR1_CEN;
 }
 
 void myEXTI_Init() {
@@ -265,26 +233,26 @@ void EXTI0_1_IRQHandler() {
 }
 
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
-void TIM3_IRQHandler() {
+void TIM16_IRQHandler() {
   /* Check if update interrupt flag is indeed set */
-  if ((TIM3->SR & TIM_SR_UIF) != 0) {
-//    trace_printf("\n*** Second ***\n");
+  if ((TIM16->SR & TIM_SR_UIF) != 0) {
+    //    trace_printf("\n*** Second ***\n");
 
-	    char freqString[9];
-	    	char resString[9];
+    char freqString[9];
+    char resString[9];
 
-	    	sprintf(freqString, "Counter");
-	    	sprintf(resString, "%4d", counter);
+    sprintf(freqString, "Counter");
+    sprintf(resString, "%4d", counter);
 
-	    	counter += 1;
+    counter += 1;
 
-	    	Write_Lines(freqString, resString);
+    Write_Lines(freqString, resString);
 
-	        /* Clear update interrupt flag */
-	        TIM3->SR &= ~(TIM_SR_UIF);
+    /* Clear update interrupt flag */
+    TIM16->SR &= ~(TIM_SR_UIF);
 
-	        /* Restart stopped timer */
-	        TIM3->CR1 |= TIM_CR1_CEN;
+    /* Restart stopped timer */
+    TIM16->CR1 |= TIM_CR1_CEN;
   }
 }
 

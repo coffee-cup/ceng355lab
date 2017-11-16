@@ -23,7 +23,7 @@
 #define GPIO_LCK_PIN (GPIO_Pin_4)
 
 // TIM6
-#define myTIM6_PRESCALE (48000) // 1 KHz
+#define myTIM6_PRESCALE ((uint16_t)((SystemCoreClock - 1) / 1000)) // 1ms per tick
 #define myTIM6_PERIOD_DEFAULT (100) // 100 ms
 
 /*

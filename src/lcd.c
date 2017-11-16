@@ -1,6 +1,5 @@
 #include "lcd.h"
 
-
 void myLCD_Init() {
   trace_printf("Initing LCD\n");
 
@@ -96,7 +95,7 @@ generates an update interrupt
 generated
    * bit 0:		Counter enable = 0 - counter disabled
    */
-//  TIM6->CR1 = ((uint16_t)0x008C);
+  //  TIM6->CR1 = ((uint16_t)0x008C);
   TIM6->CR1 = 0x84;
 
   // Set clock prescaler value
@@ -126,7 +125,8 @@ void Delay(uint32_t time) {
   TIM6->CR1 |= TIM_CR1_CEN;
 
   // Wait until interrupt occurs
-  while ((TIM6->SR & TIM_SR_UIF) == 0);
+  while ((TIM6->SR & TIM_SR_UIF) == 0)
+    ;
 
   // Stop timer
   TIM6->CR1 &= ~(TIM_CR1_CEN);
@@ -168,44 +168,40 @@ void LCD_Data(uint8_t type, uint8_t data) {
   uint8_t low_data = data & 0xF;
 
   SPI_Write(LCD_DIS | type | high_data);
-  SPI_Write(LCD_EN 	| type | high_data);
+  SPI_Write(LCD_EN | type | high_data);
   SPI_Write(LCD_DIS | type | high_data);
 
   SPI_Write(LCD_DIS | type | low_data);
-  SPI_Write(LCD_EN 	| type | low_data);
+  SPI_Write(LCD_EN | type | low_data);
   SPI_Write(LCD_DIS | type | low_data);
 }
 
 void LCD_Word(char *s) {
-	char *ch = s;
-	while(*ch != NULL) {
-		LCD_Char(*ch);
-		ch++;
-	}
+  char *ch = s;
+  while (*ch != NULL) {
+    LCD_Char(*ch);
+    ch++;
+  }
 }
 
-void LCD_Char(char ch) {
-	LCD_Data(LCD_CHAR, (uint8_t)(ch));
-}
+void LCD_Char(char ch) { LCD_Data(LCD_CHAR, (uint8_t)(ch)); }
 
-void LCD_Command(uint8_t data) {
-	LCD_Data(LCD_CMD, data);
-}
+void LCD_Command(uint8_t data) { LCD_Data(LCD_CMD, data); }
 
 void LCD_Clear() {
-	// Send the clear command
-	LCD_Command(LCD_CLEAR_CMD);
+  // Send the clear command
+  LCD_Command(LCD_CLEAR_CMD);
 
-	// This command takes time, wait 2ms for it to complete
-	Delay(2);
+  // This command takes time, wait 2ms for it to complete
+  Delay(2);
 }
 
 void Write_Lines(char *first_line, char *second_line) {
-	LCD_Clear();
+  LCD_Clear();
 
-	LCD_Command(LCD_FIRST_LINE);
-	LCD_Word(first_line);
+  LCD_Command(LCD_FIRST_LINE);
+  LCD_Word(first_line);
 
-	LCD_Command(LCD_SECOND_LINE);
-	LCD_Word(second_line);
+  LCD_Command(LCD_SECOND_LINE);
+  LCD_Word(second_line);
 }
