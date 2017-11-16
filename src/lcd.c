@@ -1,28 +1,28 @@
 #include "lcd.h"
 
+
 void myLCD_Init() {
   trace_printf("Initing LCD\n");
 
   myGPIOB_Init();
-  myTIM3_Init();
+  myTIM6_Init();
   mySPI_Init();
 
-  // Test delay 5s
-//  Delay(0xE4E1C00);
-//  trace_printf("After 5s\n");
+  /*
+   * If LCD is in 8 bit mode, this will set it in 4 bit mode
+   * If LCD is in 4 bit mode, this will send the cursor home (top left)
+   */
+  LCD_Command(LCD_RETURN_HOME);
+  Delay(2); // To account for 1.52ms execution time
 
-  LCD_Command(ENABLE);
+  // Configure the display
+  LCD_Command(0x28); // 2 lines of 8 characters
+  LCD_Command(0x0C); // Cursor not displayed
+  LCD_Command(0x06); // Auto increment DDRAM address after each char read
 
-  SPI_Write(0x02);
-  SPI_Write(0x82);
-  SPI_Write(0x02);
+  LCD_Clear();
 
-  LCD_Command(0x28);
-
-  LCD_Command(0x01);
-
-  char ch = 'J';
-  LCD_Char(&ch);
+  Write_Lines("Hello", "World");
 }
 
 // Enable SPI
@@ -52,8 +52,7 @@ void mySPI_Init() {
 void myGPIOB_Init() {
   trace_printf("Initing GPIOB\n");
 
-  /* Enable clock for GPIOA peripheral */
-  // Relevant register: RCC->AHBENR
+  /* Enable clock for GPIOB peripheral */
   RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
 
   GPIO_InitTypeDef GPIO_InitStructInfo;
@@ -76,16 +75,16 @@ void myGPIOB_Init() {
   GPIO_Init(GPIOB, GPIO_InitStruct);
 }
 
-// Enable the TIM3 Timer
+// Enable the TIM6 Timer
 // This is used to wait for some LCD operations to complete
 // e.g. clearing the display
-void myTIM3_Init() {
+void myTIM6_Init() {
 
-  // Enable the clock for TIM3
-  RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+  // Enable the clock for TIM6
+  RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
 
   /*
-   * Settings for TIM3
+   * Settings for TIM6
          *
    * bit 7: 	Auto reload preload enable = 1
    * bit 6-5: 	Center-aligned mode selection = 00
@@ -97,16 +96,17 @@ generates an update interrupt
 generated
    * bit 0:		Counter enable = 0 - counter disabled
    */
-  TIM3->CR1 = ((uint16_t)0x008C);
+//  TIM6->CR1 = ((uint16_t)0x008C);
+  TIM6->CR1 = 0x84;
 
   // Set clock prescaler value
-  TIM3->PSC = myTIM3_PRESCALE;
+  TIM6->PSC = myTIM6_PRESCALE;
 
   // Set auto-reloaded delay
-  TIM3->ARR = myTIM3_PERIOD_DEFAULT;
+  TIM6->ARR = myTIM6_PERIOD_DEFAULT;
 
   /* Update timer registers */
-  TIM3->EGR = ((uint16_t)0x0001);
+  TIM6->EGR = ((uint16_t)0x0001);
 }
 
 /*
@@ -114,25 +114,25 @@ generated
  */
 void Delay(uint32_t time) {
   // Clear timer
-  TIM3->CNT = (uint32_t)0x0;
+  TIM6->CNT = (uint32_t)0x0;
 
   // Set timeout
-  TIM3->ARR = time;
+  TIM6->ARR = time;
 
   // Update timer registers
-  TIM3->EGR |= 0x0001;
+  TIM6->EGR |= 0x0001;
 
   // Start the timer
-  TIM3->CR1 |= TIM_CR1_CEN;
+  TIM6->CR1 |= TIM_CR1_CEN;
 
   // Wait until interrupt occurs
-  while (!(TIM3->SR & TIM_SR_UIF));
+  while ((TIM6->SR & TIM_SR_UIF) == 0);
 
   // Stop timer
-  TIM3->CR1 &= ~(TIM_CR1_CEN);
+  TIM6->CR1 &= ~(TIM_CR1_CEN);
 
   // Reset the interrupt flag
-  TIM3->SR &= ~(TIM_SR_UIF);
+  TIM6->SR &= ~(TIM_SR_UIF);
 }
 
 void SPI_Write(uint8_t data) {
@@ -155,7 +155,7 @@ void SPI_Write(uint8_t data) {
   GPIOB->BSRR = GPIO_LCK_PIN;
 }
 
-void LCD_Word(uint8_t type, uint8_t data) {
+void LCD_Data(uint8_t type, uint8_t data) {
   /*
    * We need to send the data in 2 parts, high and low.
    * This is because the 4 MSBs are reserved for EN and RS registers
@@ -168,14 +168,44 @@ void LCD_Word(uint8_t type, uint8_t data) {
   uint8_t low_data = data & 0xF;
 
   SPI_Write(LCD_DIS | type | high_data);
-  SPI_Write(LCD_EN | type | high_data);
+  SPI_Write(LCD_EN 	| type | high_data);
   SPI_Write(LCD_DIS | type | high_data);
 
   SPI_Write(LCD_DIS | type | low_data);
-  SPI_Write(LCD_EN | type | low_data);
+  SPI_Write(LCD_EN 	| type | low_data);
   SPI_Write(LCD_DIS | type | low_data);
 }
 
-void LCD_Char(char *ch) { LCD_Word(LCD_CHAR, (uint8_t)(*ch)); }
+void LCD_Word(char *s) {
+	char *ch = s;
+	while(*ch != NULL) {
+		LCD_Char(*ch);
+		ch++;
+	}
+}
 
-void LCD_Command(uint8_t data) { LCD_Word(LCD_CMD, data); }
+void LCD_Char(char ch) {
+	LCD_Data(LCD_CHAR, (uint8_t)(ch));
+}
+
+void LCD_Command(uint8_t data) {
+	LCD_Data(LCD_CMD, data);
+}
+
+void LCD_Clear() {
+	// Send the clear command
+	LCD_Command(LCD_CLEAR_CMD);
+
+	// This command takes time, wait 2ms for it to complete
+	Delay(2);
+}
+
+void Write_Lines(char *first_line, char *second_line) {
+	LCD_Clear();
+
+	LCD_Command(LCD_FIRST_LINE);
+	LCD_Word(first_line);
+
+	LCD_Command(LCD_SECOND_LINE);
+	LCD_Word(second_line);
+}
