@@ -4,19 +4,6 @@
 #include "lcd.h"
 #include <stdio.h>
 
-// ----------------------------------------------------------------------------
-//
-// STM32F0 empty sample (trace via $(trace)).
-//
-// Trace support is enabled by adding the TRACE macro definition.
-// By default the trace messages are forwarded to the $(trace) output,
-// but can be rerouted to any device or completely suppressed, by
-// changing the definitions required in system/src/diag/trace_impl.c
-// (currently OS_USE_TRACE_ITM, OS_USE_TRACE_SEMIHOSTING_DEBUG/_STDOUT).
-//
-
-// ----- main() ---------------------------------------------------------------
-
 // Sample pragmas to cope with warnings. Please note the related line at
 // the end of this function, used to pop the compiler diagnostics status.
 #pragma GCC diagnostic push
@@ -34,6 +21,11 @@
 // 1 Second
 #define myTIM3_PERIOD (1000)
 
+#define TRUE (1)
+#define FALSE (0)
+
+#define DEBUG TRUE
+
 void myGPIOA_Init(void);
 void myADC_Init(void);
 void myDAC_Init(void);
@@ -49,28 +41,56 @@ int counter = 0;
 float frequency = 2700;
 float resistance = 4255;
 
+/*
+ * Main
+ */
+
 int main(int argc, char *argv[]) {
   trace_printf("System clock: %u Hz\n", SystemCoreClock);
 
   myGPIOA_Init(); /* Initialize I/O port PA */
   myTIM2_Init();  /* Initialize timer TIM2 */
   myEXTI_Init();  /* Initialize EXTI */
-  myADC_Init();
-  myDAC_Init();
+  myADC_Init();   /* Initialize Analog to digital converter */
+  myDAC_Init();   /* Initialize Digital to analog converter */
   myLCD_Init();   /* Initialize LCD Display */
-  myTIM3_Init(); /* Initialize timer TIM3 */
+  myTIM3_Init();  /* Initialize timer TIM3 */
 
   // Main loop
-  while(1) {
-	  uint32_t digitalPotValue = getPotValue();
+  while (TRUE) {
+    uint32_t digitalPotValue = getPotValue();
 
-	  resistance = (float)digitalPotValue;
+    resistance = (float)digitalPotValue;
 
-	  trace_printf("%u\n", digitalPotValue);
+    trace_printf("%u\n", digitalPotValue);
   }
 
   return 0;
 }
+
+/*
+ * Convert the resistance from the potentiometer to a digital value
+ */
+uint32_t getPotValue() {
+  // Start analog-to-digital conversion
+  ADC1->CR |= ADC_CR_ADSTART;
+
+  // Wait for conversion to finish
+  while (!(ADC1->ISR & ADC_ISR_EOC))
+    ;
+
+  // Reset flag
+  ADC1->ISR &= ~(ADC_ISR_EOC);
+
+  // Get the converted value from ADC
+  uint32_t digitalValue = ADC1->DR & ADC_DR_DATA;
+
+  return digitalValue;
+}
+
+/*
+ * Inits
+ */
 
 void myGPIOA_Init() {
   /* Enable clock for GPIOA peripheral */
@@ -80,52 +100,56 @@ void myGPIOA_Init() {
   /* PA1 - Input for signal detection */
   GPIOA->MODER &= ~(GPIO_MODER_MODER0); // input
   GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR0); // no pull-up/pull-down
+}
+
+void myADC_Init(void) {
+  if (DEBUG)
+    trace_printf("START ADC INIT\n");
+
+  // Enable clock for ADC
+  RCC->APB2ENR |= RCC_APB2ENR_ADCEN;
 
   /* PA0 - Input for POT */
   GPIOA->MODER &= ~(GPIO_MODER_MODER1); // input
   GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR1); // no pull-up/pull-down
 
-  /* PA4 - Output to 4N35 */
-  GPIOA->MODER &= ~(GPIO_MODER_MODER4); // output
-  GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR4); // no pull-up/pull-down
-}
+  // Start calibration
+  ADC1->CR = ADC_CR_ADCAL;
 
-void myADC_Init(void) {
-	trace_printf("START ADC INIT\n");
+  // Wait for calibration to finish (CR[31] == 0)
+  while (ADC1->CR & ADC_CR_ADCAL)
+    ;
 
-	// Enable clock for ADC
-	RCC->APB2ENR |= RCC_APB2ENR_ADCEN;
+  // Configure continuous conversion mode
+  ADC1->CFGR1 |= ADC_CFGR1_CONT;
 
-	// Start calibration
-	ADC1->CR = ADC_CR_ADCAL;
+  // Configure overrun mode
+  ADC1->CFGR1 |= ADC_CFGR1_OVRMOD;
 
-	// Wait for calibration to finish (CR[31] == 0)
-	while(ADC1->CR & ADC_CR_ADCAL);
+  // Select the channel where the analog signal is coming from
+  ADC1->CHSELR = ADC_CHSELR_CHSEL0;
 
-	// Configure continuous conversion mode
-	ADC1->CFGR1 |= ADC_CFGR1_CONT;
+  // Enable ADC
+  ADC1->CR |= ADC_CR_ADEN;
 
-	// Configure overrun mode
-	ADC1->CFGR1 |= ADC_CFGR1_OVRMOD;
+  // Wait for ADC to be ready (ADRDY flag has been set)
+  while (!(ADC1->ISR & ADC_ISR_ADRDY))
+    ;
 
-	// Select the channel where the analog signal is coming from
-	ADC1->CHSELR = ADC_CHSELR_CHSEL0;
-
-	// Enable ADC
-	ADC1->CR |= ADC_CR_ADEN;
-
-	// Wait for ADC to be ready (ADRDY flag has been set)
-	while(!(ADC1->ISR & ADC_ISR_ADRDY));
-
-	trace_printf("ADC READY\n");
+  if (DEBUG)
+    trace_printf("ADC READY\n");
 }
 
 void myDAC_Init(void) {
-	// Enable clock for DAC
-	RCC->AHBENR |= RCC_APB1ENR_DACEN;
+  // Enable clock for DAC
+  RCC->AHBENR |= RCC_APB1ENR_DACEN;
 
-	// Enable DAC
-	DAC->CR = DAC_CR_EN1;
+  /* PA4 - Output to 4N35 */
+  GPIOA->MODER &= ~(GPIO_MODER_MODER4); // output
+  GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR4); // no pull-up/pull-down
+
+  // Enable DAC
+  DAC->CR = DAC_CR_EN1;
 }
 
 void myTIM2_Init() {
@@ -218,21 +242,9 @@ void myEXTI_Init() {
   NVIC_EnableIRQ(EXTI0_1_IRQn);
 }
 
-uint32_t getPotValue() {
-	// Start analog-to-digital conversion
-	ADC1->CR |= ADC_CR_ADSTART;
-
-	// Wait for conversion to finish
-	while(!(ADC1->ISR & ADC_ISR_EOC));
-
-	// Reset flag
-	ADC1->ISR &= ~(ADC_ISR_EOC);
-
-	// Get the converted value from ADC
-	uint32_t digitalValue = ADC1->DR & ADC_DR_DATA;
-
-	return digitalValue;
-}
+/*
+ * Interrupt Handlers
+ */
 
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
 void TIM2_IRQHandler() {
@@ -259,32 +271,6 @@ void EXTI0_1_IRQHandler() {
 
     if (timerEnabled == 1) { /* Timer is running, we need to stop it */
       // Second edge
-
-      /*
-       * MAX Frequency
-       *
-       * 500 kHz
-       *
-       * By the time the new rising edge comes, we are still
-       * processing the first one. Our interrupt handler cannot
-       * keep up with the speed of the signal.
-       *
-       * Theoretical max is the system clock speed (4.8 MHz).
-       * But it takes to print and there are only processes running
-       * on this computer.
-       *
-       * MIN Frequency
-       *
-       * TIM2 counter only has 32 bits. Min frequency will happen
-       * when counter value overflows
-       *
-       * 2^(32-1) = 2147483648
-       *
-       *
-       * 2147483648 / 48000000 (SystemCoreClock) = 44.7392426667 seconds
-       * 1 / 44.7392426667 seconds = 0.02235174179 Hz
-       *
-       */
 
       uint32_t count = TIM2->CNT; /* Total number of clock cycles */
 
@@ -318,9 +304,6 @@ void TIM3_IRQHandler() {
 
     sprintf(freqString, "F:%4.0fHz", frequency);
     sprintf(resString, "R:%4.0fOh", resistance);
-
-//    frequency -= 1.5;
-//    resistance += 1.5;
 
     Write_Lines(freqString, resString);
 
