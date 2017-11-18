@@ -29,19 +29,25 @@
 /* Maximum possible setting for overflow */
 #define myTIM2_PERIOD ((uint32_t)0xFFFFFFFF)
 
-// No prescaler for TIM16
-#define myTIM16_PRESCALER ((uint16_t)0x0000)
+// No prescaler for TIM3
+#define myTIM3_PRESCALER ((uint16_t)96000000)
 // 1 Second
-#define myTIM16_PERIOD ((uint32_t)SystemCoreClock)
+#define myTIM3_PERIOD (1000)
 
 void myGPIOA_Init(void);
+void myADC_Init(void);
+void myDAC_Init(void);
 void myTIM2_Init(void);
-void myTIM16_Init(void);
+void myTIM3_Init(void);
 void myEXTI_Init(void);
+
+uint32_t getPotValue();
 
 // Your global variables...
 
 int counter = 0;
+float frequency = 2700;
+float resistance = 4255;
 
 int main(int argc, char *argv[]) {
   trace_printf("System clock: %u Hz\n", SystemCoreClock);
@@ -49,8 +55,19 @@ int main(int argc, char *argv[]) {
   myGPIOA_Init(); /* Initialize I/O port PA */
   myTIM2_Init();  /* Initialize timer TIM2 */
   myEXTI_Init();  /* Initialize EXTI */
+  myADC_Init();
+  myDAC_Init();
   myLCD_Init();   /* Initialize LCD Display */
-  myTIM16_Init(); /* Initialize timer TIM16 */
+  myTIM3_Init(); /* Initialize timer TIM3 */
+
+  // Main loop
+  while(1) {
+	  uint32_t digitalPotValue = getPotValue();
+
+	  resistance = (float)digitalPotValue;
+
+	  trace_printf("%u\n", digitalPotValue);
+  }
 
   return 0;
 }
@@ -60,13 +77,55 @@ void myGPIOA_Init() {
   // Relevant register: RCC->AHBENR
   RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
 
-  /* Configure PA1 as input */
-  // Relevant register: GPIOA->MODER
-  GPIOA->MODER &= ~(GPIO_MODER_MODER0);
+  /* PA1 - Input for signal detection */
+  GPIOA->MODER &= ~(GPIO_MODER_MODER0); // input
+  GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR0); // no pull-up/pull-down
 
-  /* Ensure no pull-up/pull-down for PA1 */
-  // Relevant register: GPIOA->PUPDR
-  GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR0);
+  /* PA0 - Input for POT */
+  GPIOA->MODER &= ~(GPIO_MODER_MODER1); // input
+  GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR1); // no pull-up/pull-down
+
+  /* PA4 - Output to 4N35 */
+  GPIOA->MODER &= ~(GPIO_MODER_MODER4); // output
+  GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR4); // no pull-up/pull-down
+}
+
+void myADC_Init(void) {
+	trace_printf("START ADC INIT\n");
+
+	// Enable clock for ADC
+	RCC->APB2ENR |= RCC_APB2ENR_ADCEN;
+
+	// Start calibration
+	ADC1->CR = ADC_CR_ADCAL;
+
+	// Wait for calibration to finish (CR[31] == 0)
+	while(ADC1->CR & ADC_CR_ADCAL);
+
+	// Configure continuous conversion mode
+	ADC1->CFGR1 |= ADC_CFGR1_CONT;
+
+	// Configure overrun mode
+	ADC1->CFGR1 |= ADC_CFGR1_OVRMOD;
+
+	// Select the channel where the analog signal is coming from
+	ADC1->CHSELR = ADC_CHSELR_CHSEL0;
+
+	// Enable ADC
+	ADC1->CR |= ADC_CR_ADEN;
+
+	// Wait for ADC to be ready (ADRDY flag has been set)
+	while(!(ADC1->ISR & ADC_ISR_ADRDY));
+
+	trace_printf("ADC READY\n");
+}
+
+void myDAC_Init(void) {
+	// Enable clock for DAC
+	RCC->AHBENR |= RCC_APB1ENR_DACEN;
+
+	// Enable DAC
+	DAC->CR = DAC_CR_EN1;
 }
 
 void myTIM2_Init() {
@@ -101,11 +160,11 @@ void myTIM2_Init() {
   TIM2->DIER |= TIM_DIER_UIE;
 }
 
-void myTIM16_Init() {
-  RCC->APB1ENR |= RCC_APB1ENR_TIM16EN;
+void myTIM3_Init() {
+  RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
 
   /*
-   * Settings for TIM16
+   * Settings for TIM3
    *
    * auto reload
    * count up
@@ -113,28 +172,28 @@ void myTIM16_Init() {
    * enable update events
    * interrupt on underflow only
    */
-  TIM16->CR1 = ((uint16_t)0x008C);
+  TIM3->CR1 = ((uint16_t)0x008C);
 
   // Set prescaler
-  TIM16->PSC = myTIM16_PRESCALER;
+  TIM3->PSC = myTIM3_PRESCALER;
 
   // Set auto reload delay
-  TIM16->ARR = myTIM16_PERIOD;
+  TIM3->ARR = myTIM3_PERIOD;
 
   // Update timer registers
-  TIM16->EGR = ((uint16_t)0x0001);
+  TIM3->EGR = ((uint16_t)0x0001);
 
-  // Assign TIM16 interrupt priority = 1 in NVIC
-  NVIC_SetPriority(TIM16_IRQn, 1);
+  // Assign TIM3 interrupt priority = 1 in NVIC
+  NVIC_SetPriority(TIM3_IRQn, 1);
 
-  // Enable TIM16 interrupts in NVIC
-  NVIC_EnableIRQ(TIM16_IRQn);
+  // Enable TIM3 interrupts in NVIC
+  NVIC_EnableIRQ(TIM3_IRQn);
 
   // Enable update interrupt generation
-  TIM16->DIER |= TIM_DIER_UIE;
+  TIM3->DIER |= TIM_DIER_UIE;
 
   // Start timer
-  TIM16->CR1 |= TIM_CR1_CEN;
+  TIM3->CR1 |= TIM_CR1_CEN;
 }
 
 void myEXTI_Init() {
@@ -157,6 +216,22 @@ void myEXTI_Init() {
   /* Enable EXTI1 interrupts in NVIC */
   // Relevant register: NVIC->ISER[0], or use NVIC_EnableIRQ
   NVIC_EnableIRQ(EXTI0_1_IRQn);
+}
+
+uint32_t getPotValue() {
+	// Start analog-to-digital conversion
+	ADC1->CR |= ADC_CR_ADSTART;
+
+	// Wait for conversion to finish
+	while(!(ADC1->ISR & ADC_ISR_EOC));
+
+	// Reset flag
+	ADC1->ISR &= ~(ADC_ISR_EOC);
+
+	// Get the converted value from ADC
+	uint32_t digitalValue = ADC1->DR & ADC_DR_DATA;
+
+	return digitalValue;
 }
 
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
@@ -233,26 +308,27 @@ void EXTI0_1_IRQHandler() {
 }
 
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
-void TIM16_IRQHandler() {
+void TIM3_IRQHandler() {
   /* Check if update interrupt flag is indeed set */
-  if ((TIM16->SR & TIM_SR_UIF) != 0) {
+  if ((TIM3->SR & TIM_SR_UIF) != 0) {
     //    trace_printf("\n*** Second ***\n");
 
     char freqString[9];
     char resString[9];
 
-    sprintf(freqString, "Counter");
-    sprintf(resString, "%4d", counter);
+    sprintf(freqString, "F:%4.0fHz", frequency);
+    sprintf(resString, "R:%4.0fOh", resistance);
 
-    counter += 1;
+//    frequency -= 1.5;
+//    resistance += 1.5;
 
     Write_Lines(freqString, resString);
 
     /* Clear update interrupt flag */
-    TIM16->SR &= ~(TIM_SR_UIF);
+    TIM3->SR &= ~(TIM_SR_UIF);
 
     /* Restart stopped timer */
-    TIM16->CR1 |= TIM_CR1_CEN;
+    TIM3->CR1 |= TIM_CR1_CEN;
   }
 }
 

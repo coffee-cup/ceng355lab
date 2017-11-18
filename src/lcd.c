@@ -21,7 +21,7 @@ void myLCD_Init() {
 
   LCD_Clear();
 
-  Write_Lines("Hello", "World");
+  Write_Lines("Welcome", "CENG355");
 }
 
 // Enable SPI
@@ -199,9 +199,11 @@ void LCD_Clear() {
 void Write_Lines(char *first_line, char *second_line) {
   LCD_Clear();
 
+  // Write the first line
   LCD_Command(LCD_FIRST_LINE);
   LCD_Word(first_line);
 
+  // Write the second line
   LCD_Command(LCD_SECOND_LINE);
   LCD_Word(second_line);
 }
