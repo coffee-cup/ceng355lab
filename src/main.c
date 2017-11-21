@@ -66,6 +66,7 @@ int main(int argc, char *argv[]) {
   LCD_Clear();
 
   // Main loop
+  trace_printf("Initialization complete\n");
   while (TRUE) {
     uint32_t digitalPotValue = getPotValue();
 
