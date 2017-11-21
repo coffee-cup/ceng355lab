@@ -78,6 +78,7 @@ void myGPIOB_Init() {
 // This is used to wait for some LCD operations to complete
 // e.g. clearing the display
 void myTIM6_Init() {
+  trace_printf("Initing TIM6\n");
 
   // Enable the clock for TIM6
   RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
@@ -86,16 +87,16 @@ void myTIM6_Init() {
    * Settings for TIM6
          *
    * bit 7: 	Auto reload preload enable = 1
-   * bit 6-5: 	Center-aligned mode selection = 00
+   * bit 6-5: Center-aligned mode selection = 00
    * bit 4:		Direction = 0 - up counter
-   * bit 3:		One-pulse mode = 1 - stops counting at next update event
+   * bit 3:		One-pulse mode = 0
    * bit 2:		Update request source = 1 - only counter overflow
 generates an update interrupt
    * bit 1:		Update disable = 0 - UEV enabled. The UEV event is
 generated
    * bit 0:		Counter enable = 0 - counter disabled
    */
-  //  TIM6->CR1 = ((uint16_t)0x008C);
+  //  10000100
   TIM6->CR1 = 0x84;
 
   // Set clock prescaler value
@@ -135,6 +136,10 @@ void Delay(uint32_t time) {
   TIM6->SR &= ~(TIM_SR_UIF);
 }
 
+/*
+ * Write some data 8 bit (1 byte) data
+ * over SPI
+ */
 void SPI_Write(uint8_t data) {
   // Do not update register output
   GPIOB->BRR = GPIO_LCK_PIN;
@@ -152,9 +157,15 @@ void SPI_Write(uint8_t data) {
   while (SPI1->SR & SPI_SR_BSY)
     ;
 
+  // Reset register output
   GPIOB->BSRR = GPIO_LCK_PIN;
 }
 
+/*
+ * Send data of type to LCD
+ *
+ * This sends 8 commands over SPI
+ */
 void LCD_Data(uint8_t type, uint8_t data) {
   /*
    * We need to send the data in 2 parts, high and low.
@@ -176,6 +187,14 @@ void LCD_Data(uint8_t type, uint8_t data) {
   SPI_Write(LCD_DIS | type | low_data);
 }
 
+/*
+ * Display a string on the LCD.
+ *
+ * Since the string is an array of characters,
+ *  each 8 bit char is sent individually to the LCD.
+ *
+ * Since auto increment is enabled, the cursor shifts automatically
+ */
 void LCD_Word(char *s) {
   char *ch = s;
   int count = 0;
@@ -184,14 +203,26 @@ void LCD_Word(char *s) {
     ch++;
 
     count++;
-    if (count > 8) break; // dont write words longer than 8
+    if (count > 8)
+      break; // dont write words longer than 8
   }
 }
 
+/*
+ * Write a single 8 bit (1 byte) character to the LCD
+ */
 void LCD_Char(char ch) { LCD_Data(LCD_CHAR, (uint8_t)(ch)); }
 
+/*
+ * Send an 8 bit command to the LCD
+ */
 void LCD_Command(uint8_t data) { LCD_Data(LCD_CMD, data); }
 
+/*
+ * Clear the LCD.
+ *
+ * This waits for 2ms so use sparingly
+ */
 void LCD_Clear() {
   // Send the clear command
   LCD_Command(LCD_CLEAR_CMD);
@@ -200,12 +231,16 @@ void LCD_Clear() {
   Delay(2);
 }
 
+/*
+ * Write a string to the first and second lines
+ *  of the LCD
+ */
 void Write_Lines(char *first_line, char *second_line) {
-//  LCD_Clear();
+  //  LCD_Clear();
 
-//  trace_printf("\n");
-//  trace_printf("%s\n", first_line);
-//  trace_printf("%s\n", second_line);
+  //  trace_printf("\n");
+  //  trace_printf("%s\n", first_line);
+  //  trace_printf("%s\n", second_line);
 
   // Write the first line
   LCD_Command(LCD_FIRST_LINE);

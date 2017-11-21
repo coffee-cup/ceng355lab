@@ -9,12 +9,15 @@
 #include "stm32f0xx_spi.h"
 #include <stdio.h>
 
-// LCD
+/*
+ * LCD Defines
+ */
 #define LCD_EN (0x80)
 #define LCD_DIS (0x00)
 #define LCD_CMD (0x00)
 #define LCD_CHAR (0x40)
 
+// Commands we can send the LCD
 #define LCD_CLEAR_CMD (0x01)
 #define LCD_RETURN_HOME (0x02)
 #define LCD_FIRST_LINE (0x80)
@@ -23,8 +26,9 @@
 #define GPIO_LCK_PIN (GPIO_Pin_4)
 
 // TIM6
-#define myTIM6_PRESCALE ((uint16_t)((SystemCoreClock - 1) / 1000)) // 1ms per tick
-#define myTIM6_PERIOD_DEFAULT (100) // 100 ms
+#define myTIM6_PRESCALE                                                        \
+  ((uint16_t)((SystemCoreClock - 1) / 1000)) // 1ms per tick
+#define myTIM6_PERIOD_DEFAULT (100)          // 100 ms
 
 /*
  * Initialize the LCD display

@@ -11,25 +11,36 @@
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
+/*
+ * TIM2
+ */
+
 /* Clock prescaler for TIM2 timer: no prescaling */
 #define myTIM2_PRESCALER ((uint16_t)0x0000)
 /* Maximum possible setting for overflow */
 #define myTIM2_PERIOD ((uint32_t)0xFFFFFFFF)
+
+/*
+ * TIM3
+ */
 
 // No prescaler for TIM3
 #define myTIM3_PRESCALER ((uint16_t)96000000)
 // 1 Second
 #define myTIM3_PERIOD (1000)
 
+/*
+ * ADC, DAC, and POT define
+ */
 #define ADC_MAX_VALUE ((float)(0xFFF))
 #define DAC_MAX_VALUE ((float)(0xFFF))
-#define DAC_MAX_VOLTAGE (2.95) // Measured as output from PA4 when DAC = DAC_MAX_VALUE
+#define DAC_MAX_VOLTAGE                                                        \
+  (2.95) // Measured as output from PA4 when DAC = DAC_MAX_VALUE
 #define DAC_MIN_VOLTAGE (1.0) // Minimum voltage needed
 #define POT_MAX_RESISTANCE (5000)
 
 #define TRUE (1)
 #define FALSE (0)
-
 #define DEBUG (FALSE)
 
 void myGPIOA_Init(void);
@@ -44,7 +55,6 @@ void digitalToAnalog(uint32_t dacValue);
 
 // Your global variables...
 
-int counter = 0;
 float frequency = 2700;
 float resistance = 4255;
 
@@ -63,15 +73,16 @@ int main(int argc, char *argv[]) {
   myLCD_Init();   /* Initialize LCD Display */
   myTIM3_Init();  /* Initialize timer TIM3 */
 
+  trace_printf("Initialization complete\n");
   LCD_Clear();
 
   // Main loop
-  trace_printf("Initialization complete\n");
   while (TRUE) {
     uint32_t digitalPotValue = getPotValue();
 
     // Convert ADC pot value to resistance in range [0, 5000]
-    float potResistance = (((float)digitalPotValue) / ADC_MAX_VALUE) * POT_MAX_RESISTANCE;
+    float potResistance =
+        (((float)digitalPotValue) / ADC_MAX_VALUE) * POT_MAX_RESISTANCE;
 
     // Pot value between 0 and 1
     float normalizedADCValue = digitalPotValue / ADC_MAX_VALUE;
@@ -88,9 +99,12 @@ int main(int argc, char *argv[]) {
 
     resistance = (float)potResistance;
 
-    if (DEBUG) trace_printf("Voltage: %f\n", voltage);
-    if (DEBUG) trace_printf("Resistance: %f\n", resistance);
-    if (DEBUG) trace_printf("DAC Value: %f\n", dacValue);
+    if (DEBUG)
+      trace_printf("Voltage: %f\n", voltage);
+    if (DEBUG)
+      trace_printf("Resistance: %f\n", resistance);
+    if (DEBUG)
+      trace_printf("DAC Value: %f\n", dacValue);
   }
 
   return 0;
@@ -119,15 +133,15 @@ uint32_t getPotValue() {
 /*
  * Perform digital to analog conversion
  */
-void digitalToAnalog(uint32_t dacValue) {
-	DAC->DHR12R1 = dacValue;
-}
+void digitalToAnalog(uint32_t dacValue) { DAC->DHR12R1 = dacValue; }
 
 /*
  * Inits
  */
 
 void myGPIOA_Init() {
+  trace_printf("Initing GPIOA\n");
+
   /* Enable clock for GPIOA peripheral */
   // Relevant register: RCC->AHBENR
   RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
@@ -146,8 +160,7 @@ void myGPIOA_Init() {
 }
 
 void myADC_Init(void) {
-  if (DEBUG)
-    trace_printf("START ADC INIT\n");
+  trace_printf("Initing ADC\n");
 
   // Enable clock for ADC
   RCC->APB2ENR |= RCC_APB2ENR_ADCEN;
@@ -174,12 +187,11 @@ void myADC_Init(void) {
   // Wait for ADC to be ready (ADRDY flag has been set)
   while (!(ADC1->ISR & ADC_ISR_ADRDY))
     ;
-
-  if (DEBUG)
-    trace_printf("ADC READY\n");
 }
 
 void myDAC_Init(void) {
+  trace_printf("Initing DAC\n");
+
   // Enable clock for DAC
   RCC->APB1ENR |= RCC_APB1ENR_DACEN;
 
@@ -188,6 +200,8 @@ void myDAC_Init(void) {
 }
 
 void myTIM2_Init() {
+  trace_printf("Initing TIM3\n");
+
   /* Enable clock for TIM2 peripheral */
   // Relevant register: RCC->APB1ENR
   RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
@@ -313,10 +327,8 @@ void EXTI0_1_IRQHandler() {
       float period = (float)count / ((float)SystemCoreClock);
       frequency = (float)1.0 / period;
 
-      if (DEBUG) trace_printf("Frequency: %f\n", frequency);
-
-//      trace_printf("Period: %f s\n", period);
-//      trace_printf("Freq:   %f Hz\n\n", frequency);
+      if (DEBUG)
+        trace_printf("Frequency: %f\n", frequency);
 
       TIM2->CR1 &= ~(TIM_CR1_CEN); /* Stop timer */
     } else {                       /* Timer is not on, we need to start it */
@@ -336,12 +348,12 @@ void TIM3_IRQHandler() {
   if ((TIM3->SR & TIM_SR_UIF) != 0) {
     //    trace_printf("\n*** Second ***\n");
 
-	float displayFreq = frequency;
-	char *freqFormat = "F:%4.0fHz";
-	if (displayFreq > 10000) {
-		displayFreq /= 1000;
-		freqFormat = "F:%3.0fkHz";
-	}
+    float displayFreq = frequency;
+    char *freqFormat = "F:%4.0fHz";
+    if (displayFreq > 10000) {
+      displayFreq /= 1000;
+      freqFormat = "F:%3.0fkHz";
+    }
 
     char freqString[9];
     char resString[9];
