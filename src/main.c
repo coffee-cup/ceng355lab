@@ -21,10 +21,16 @@
 // 1 Second
 #define myTIM3_PERIOD (1000)
 
+#define ADC_MAX_VALUE ((float)(0xFFF))
+#define DAC_MAX_VALUE ((float)(0xFFF))
+#define DAC_MAX_VOLTAGE (2.95) // Measured as output from PA4 when DAC = DAC_MAX_VALUE
+#define DAC_MIN_VOLTAGE (1.0) // Minimum voltage needed
+#define POT_MAX_RESISTANCE (5000)
+
 #define TRUE (1)
 #define FALSE (0)
 
-#define DEBUG TRUE
+#define DEBUG (FALSE)
 
 void myGPIOA_Init(void);
 void myADC_Init(void);
@@ -34,6 +40,7 @@ void myTIM3_Init(void);
 void myEXTI_Init(void);
 
 uint32_t getPotValue();
+void digitalToAnalog(uint32_t dacValue);
 
 // Your global variables...
 
@@ -49,20 +56,40 @@ int main(int argc, char *argv[]) {
   trace_printf("System clock: %u Hz\n", SystemCoreClock);
 
   myGPIOA_Init(); /* Initialize I/O port PA */
-  myTIM2_Init();  /* Initialize timer TIM2 */
-  myEXTI_Init();  /* Initialize EXTI */
   myADC_Init();   /* Initialize Analog to digital converter */
   myDAC_Init();   /* Initialize Digital to analog converter */
+  myTIM2_Init();  /* Initialize timer TIM2 */
+  myEXTI_Init();  /* Initialize EXTI */
   myLCD_Init();   /* Initialize LCD Display */
   myTIM3_Init();  /* Initialize timer TIM3 */
+
+  LCD_Clear();
 
   // Main loop
   while (TRUE) {
     uint32_t digitalPotValue = getPotValue();
 
-    resistance = (float)digitalPotValue;
+    // Convert ADC pot value to resistance in range [0, 5000]
+    float potResistance = (((float)digitalPotValue) / ADC_MAX_VALUE) * POT_MAX_RESISTANCE;
 
-    trace_printf("%u\n", digitalPotValue);
+    // Pot value between 0 and 1
+    float normalizedADCValue = digitalPotValue / ADC_MAX_VALUE;
+
+    // Convert the resistance to a voltage
+    float voltageRange = DAC_MAX_VOLTAGE - DAC_MIN_VOLTAGE;
+    float voltage = (normalizedADCValue * voltageRange) + DAC_MIN_VOLTAGE;
+
+    // Convert voltage value for ADC conversion
+    float dacValue = (voltage / DAC_MAX_VOLTAGE) * DAC_MAX_VALUE;
+
+    // Start the conversion
+    digitalToAnalog(dacValue);
+
+    resistance = (float)potResistance;
+
+    if (DEBUG) trace_printf("Voltage: %f\n", voltage);
+    if (DEBUG) trace_printf("Resistance: %f\n", resistance);
+    if (DEBUG) trace_printf("DAC Value: %f\n", dacValue);
   }
 
   return 0;
@@ -89,6 +116,13 @@ uint32_t getPotValue() {
 }
 
 /*
+ * Perform digital to analog conversion
+ */
+void digitalToAnalog(uint32_t dacValue) {
+	DAC->DHR12R1 = dacValue;
+}
+
+/*
  * Inits
  */
 
@@ -100,6 +134,14 @@ void myGPIOA_Init() {
   /* PA1 - Input for signal detection */
   GPIOA->MODER &= ~(GPIO_MODER_MODER0); // input
   GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR0); // no pull-up/pull-down
+
+  /* PA0 - Input for POT */
+  GPIOA->MODER &= ~(GPIO_MODER_MODER1); // input
+  GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR1); // no pull-up/pull-down
+
+  /* PA4 - Output to 4N35 */
+  GPIOA->MODER &= ~(GPIO_MODER_MODER4); // output
+  GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR4); // no pull-up/pull-down
 }
 
 void myADC_Init(void) {
@@ -108,10 +150,6 @@ void myADC_Init(void) {
 
   // Enable clock for ADC
   RCC->APB2ENR |= RCC_APB2ENR_ADCEN;
-
-  /* PA0 - Input for POT */
-  GPIOA->MODER &= ~(GPIO_MODER_MODER1); // input
-  GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR1); // no pull-up/pull-down
 
   // Start calibration
   ADC1->CR = ADC_CR_ADCAL;
@@ -142,11 +180,7 @@ void myADC_Init(void) {
 
 void myDAC_Init(void) {
   // Enable clock for DAC
-  RCC->AHBENR |= RCC_APB1ENR_DACEN;
-
-  /* PA4 - Output to 4N35 */
-  GPIOA->MODER &= ~(GPIO_MODER_MODER4); // output
-  GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR4); // no pull-up/pull-down
+  RCC->APB1ENR |= RCC_APB1ENR_DACEN;
 
   // Enable DAC
   DAC->CR = DAC_CR_EN1;
@@ -275,11 +309,13 @@ void EXTI0_1_IRQHandler() {
       uint32_t count = TIM2->CNT; /* Total number of clock cycles */
 
       /* System Clock = 48 MHz */
-      double period = (double)count / ((double)SystemCoreClock);
-      double freq = (double)1.0 / period;
+      float period = (float)count / ((float)SystemCoreClock);
+      frequency = (float)1.0 / period;
 
-      trace_printf("Period: %f s\n", period);
-      trace_printf("Freq:   %f Hz\n\n", freq);
+      if (DEBUG) trace_printf("Frequency: %f\n", frequency);
+
+//      trace_printf("Period: %f s\n", period);
+//      trace_printf("Freq:   %f Hz\n\n", frequency);
 
       TIM2->CR1 &= ~(TIM_CR1_CEN); /* Stop timer */
     } else {                       /* Timer is not on, we need to start it */
@@ -299,10 +335,17 @@ void TIM3_IRQHandler() {
   if ((TIM3->SR & TIM_SR_UIF) != 0) {
     //    trace_printf("\n*** Second ***\n");
 
+	float displayFreq = frequency;
+	char *freqFormat = "F:%4.0fHz";
+	if (displayFreq > 10000) {
+		displayFreq /= 1000;
+		freqFormat = "F:%3.0fkHz";
+	}
+
     char freqString[9];
     char resString[9];
 
-    sprintf(freqString, "F:%4.0fHz", frequency);
+    sprintf(freqString, freqFormat, displayFreq);
     sprintf(resString, "R:%4.0fOh", resistance);
 
     Write_Lines(freqString, resString);

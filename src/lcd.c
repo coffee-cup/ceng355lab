@@ -178,9 +178,13 @@ void LCD_Data(uint8_t type, uint8_t data) {
 
 void LCD_Word(char *s) {
   char *ch = s;
+  int count = 0;
   while (*ch != NULL) {
     LCD_Char(*ch);
     ch++;
+
+    count++;
+    if (count > 8) break; // dont write words longer than 8
   }
 }
 
@@ -197,7 +201,11 @@ void LCD_Clear() {
 }
 
 void Write_Lines(char *first_line, char *second_line) {
-  LCD_Clear();
+//  LCD_Clear();
+
+//  trace_printf("\n");
+//  trace_printf("%s\n", first_line);
+//  trace_printf("%s\n", second_line);
 
   // Write the first line
   LCD_Command(LCD_FIRST_LINE);
